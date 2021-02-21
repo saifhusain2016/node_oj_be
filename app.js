@@ -1,6 +1,7 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const mongoConnect = require("./util/database").mongoConnect;
+const { ValidationError } = require("express-validation");
 
 const app = express();
 const port = 8000;
@@ -20,24 +21,22 @@ app.use((req, res, next) => {
 
 app.use("/auth", authRoutes);
 
+app.use(function (err, req, res, next) {
+  if (err instanceof ValidationError) {
+    return res.status(err.statusCode).json(err);
+  }
+  return res.status(500).json(err);
+});
+
+app.use((err, req, res, next) => {
+  if (err instanceof ValidationError) {
+    return res.status(err.statusCode).json(err);
+  }
+  return res.status(err.statusCode || 500).json({ message: err.message });
+});
+
 mongoConnect(() => {
   app.listen(port, () => {
     console.log("server connected !  Running on port ", port);
   });
 });
-
-/*
-MongoClient.connect(mongo_uri, (err, db) => {
-  if (err) {
-    throw err;
-  } else {
-    console.log("connected to database");
-    app.listen(port, () => {
-      console.log("Server is running on port ", port);
-    });
-    //var dbo = db.db("auth");
-    //var newUser = { email: "saif@gmail.com", password: "1234" };
-    //dbo.collection("users").insertOne(newUser);
-  }
-});
-*/

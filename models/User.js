@@ -1,60 +1,49 @@
 const getDb = require("../util/database").getDb;
 
 class User {
-  constructor(username, password) {
-    this.username = username;
+  constructor(name, email, password) {
+    this.name = name;
+    this.email = email;
     this.password = password;
   }
 
-  static addNewUser(name, email, password) {
+  static async createUser(name, email, password) {
     const db = getDb();
-    return db
+
+    const isAlreadyExist = await db
       .collection("users")
       .find({ email: email })
-      .next()
-      .then((user) => {
-        if (user) {
-          console.log("user already exist");
-          return {
-            created: false,
-            message: "user already exist",
-          };
-        } else {
-          return db
-            .collection("users")
-            .insertOne({
-              name: name,
-              email: email,
-              password: password,
-            })
-            .then((newUser) => {
-              if (newUser) {
-                console.log("new user added successfully");
-                return {
-                  created: true,
-                  message: "user created successfully",
-                };
-              }
-            })
-            .catch((err) => {
-              console.log(err);
-            });
-        }
+      .next();
+
+    if (isAlreadyExist) {
+      return {
+        created: false,
+        message: "user already exist",
+      };
+    }
+
+    try {
+      await db.collection("users").insertOne({
+        name: name,
+        email: email,
+        password: password,
       });
+      return {
+        created: true,
+        message: "user created successfully",
+      };
+    } catch (err) {
+      next(err);
+    }
   }
 
-  static verifyUser(email) {
+  static async findByEmail(email) {
     const db = getDb();
-    return db
-      .collection("users")
-      .find({ email: email })
-      .next()
-      .then((user) => {
-        return user;
-      })
-      .catch((err) => {
-        console.log("error");
-      });
+    try {
+      return await db.collection("users").find({ email: email }).next();
+    } catch (err) {
+      next(err);
+    }
   }
 }
 

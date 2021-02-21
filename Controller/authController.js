@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 
 exports.getLogin = (req, res, next) => {
   res.status(200).json({
@@ -7,50 +8,73 @@ exports.getLogin = (req, res, next) => {
   });
 };
 
-exports.postLogin = (req, res, next) => {
+exports.postLogin = async (req, res, next) => {
   const email = req.body.email;
   const password = req.body.password;
+  try {
+    const user = await User.findByEmail(email);
+    console.log(user);
+    const isPasswordSame = await bcrypt.compare(password, user.password);
+    console.log(isPasswordSame);
 
-  User.verifyUser(email).then((user) => {
-    if (user !== null) {
-      bcrypt.compare(password, user.password).then((hash) => {
-        if (hash) {
-          res.status(200).json({
-            message: "login successful",
-          });
-        } else {
-          res.status(401).json({
-            message: "Invalid Password",
-          });
-        }
-      });
-    } else {
-      res.status(401).json({
-        message: "Invalid User Email",
+    const statusCode = isPasswordSame ? 200 : 401;
+    const message = isPasswordSame ? "Login Successful" : "Invalid Credentials";
+    let token = null;
+
+    if (isPasswordSame) {
+      token = jwt.sign({ email: email, userId: password }, "secretText", {
+        expiresIn: "1h",
       });
     }
-  });
+
+    res.status(statusCode).json({ message: message, token: token });
+  } catch (err) {
+    console.log("err: " + err);
+    next(err);
+  }
 };
 
-exports.postSignup = (req, res, next) => {
+exports.postSignup = async (req, res, next) => {
   const name = req.body.name;
   const email = req.body.email;
   const password = req.body.password;
-  const hash = bcrypt.hashSync(password, 10);
+  try {
+    const hash = bcrypt.hashSync(password, 10);
+    const newUser = await User.createUser(name, email, hash);
+    const statusCode = newUser.created ? 200 : 409;
+    const message = newUser.message || "some error occured";
+    res.status(statusCode).json({ message: message });
+  } catch (err) {
+    next(err);
+  }
+};
 
-  User.addNewUser(name, email, hash).then((newUser) => {
-    console.log("newUser: ", newUser);
-    if (newUser.created) {
-      res.status(200).json({
-        message: newUser.message,
-        newUser: newUser,
-      });
-    } else {
-      res.status(403).json({
-        message: newUser.message
-          ? newUser.message
-          : "Some Error Occured. User not created",
-      });
-    }
-  });
+exports.getSession = async (req, res, next) => {
+  const header = req.get("Authorization");
+  console.log("header: ", header);
+  if (!header) {
+    const error = new Error("Not Authenticated");
+    error.status = 503;
+    return next(error);
+  }
+
+  const token = header.split(" ")[1];
+  console.log("token : ", token);
+  let decodedToken = false;
+
+  try {
+    decodedToken = await jwt.verify(token, "secretText");
+  } catch (err) {
+    err.status = 503;
+    return next(err);
+  }
+
+  console.log("decoded token: ", decodedToken);
+
+  if (!decodedToken) {
+    const error = new Error("Session Expired");
+    return next(error);
+  }
+
+  res.status(200).json({ message: "Session is Valid" });
 };
